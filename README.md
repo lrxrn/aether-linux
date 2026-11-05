@@ -39,7 +39,7 @@ Not included (use the Aether web console for these): macros, SOCD / advanced key
 The binary is called **`aetherctl`** because Arch's `aether` package (the theme generator) already owns `/usr/bin/aether`.
 
 ```sh
-git clone <this repo> aether-linux && cd aether-linux
+git clone https://github.com/lrxrn/aether-linux.git && cd aether-linux
 make install                     # builds and copies `aetherctl` to ~/.local/bin (override with PREFIX=/usr/local)
 ```
 
