@@ -92,21 +92,28 @@ func home(p string) string { return os.Getenv("HOME") + "/" + p }
 
 // widgetStops: the dim -> accent -> light ramp desktop-recolor.sh gives cava, from the wallpaper palette.
 func widgetStops() []RGB {
-	b, err := os.ReadFile(home(".cache/desktop-widgets/colors.json"))
-	if err != nil {
-		return nil
-	}
-	var c struct{ Bg, Fg, Accent string }
-	if json.Unmarshal(b, &c) != nil {
-		return nil
-	}
-	bg, e1 := hexRGB(c.Bg)
-	fg, e2 := hexRGB(c.Fg)
-	ac, e3 := hexRGB(c.Accent)
-	if e1 != nil || e2 != nil || e3 != nil {
+	bg, fg, ac, ok := widgetBase()
+	if !ok {
 		return nil
 	}
 	return []RGB{mix(ac, bg, .35), ac, mix(ac, fg, .3)}
+}
+
+// widgetBase is the wallpaper palette (background, text, accent) the desktop widgets use.
+func widgetBase() (bg, fg, ac RGB, ok bool) {
+	b, err := os.ReadFile(home(".cache/desktop-widgets/colors.json"))
+	if err != nil {
+		return
+	}
+	var c struct{ Bg, Fg, Accent string }
+	if json.Unmarshal(b, &c) != nil {
+		return
+	}
+	var e1, e2, e3 error
+	bg, e1 = hexRGB(c.Bg)
+	fg, e2 = hexRGB(c.Fg)
+	ac, e3 = hexRGB(c.Accent)
+	return bg, fg, ac, e1 == nil && e2 == nil && e3 == nil
 }
 
 var tomlColor = regexp.MustCompile(`(?m)^(\w+)\s*=\s*"#([0-9a-fA-F]{6})"`)

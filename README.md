@@ -6,13 +6,11 @@ A native Linux **terminal UI and CLI for the VOICSKY PULSE 96** keyboard: lighti
 > Unofficial. Not affiliated with VOICSKY. The protocol was worked out by reading what the Aether web console sends over
 > WebHID, for interoperability. Use at your own risk (see [Safety](#safety)).
 
-```
-▌AETHER linux · VOICSKY PULSE 96   fw 1.07
-[ LIGHTING ]   REMAP     MUSIC     DEVICE
- Esc  F1  F2 ... live on-screen keyboard that mirrors the colours the board is really showing ...
-┤ colour ├ palette widgets   brush ██ #ff5a5a   (g apply gradient · p palette · c brush · space/click paint key)
-┤ effect ├ 1/19 Static Bright   bright ■■■■■■   speed ■■□□□□   (e/E effect · +/- bright · [ ] speed · a apply)
-```
+![aetherctl TUI: keyboard mirror, lighting, music and key boxes](docs/tui.png)
+
+With the music service running (the header and the music box show its status, `m` toggles it):
+
+![aetherctl with the music service running](docs/tui-music.png)
 
 ## Features
 
@@ -77,14 +75,19 @@ aetherctl help       # all commands
 
 ### TUI keys
 
-`tab` / `shift+tab` switch tabs · arrows or `hjkl` or the mouse select a key · `q` quits.
+One screen, no tabs: the live keyboard on top and lighting / music / key boxes below. The header shows the music service
+status (`♪ music ● running [m]`), and you can click it to start or stop the service. Arrows or `hjkl` or a mouse click select a key, `q` quits.
 
-| Tab | Keys |
+| Keys | |
 |---|---|
-| **LIGHTING** | `g` apply gradient of the palette · `p` next palette · `e`/`E` effect · `+`/`-` brightness · `[`/`]` speed · `a` apply the effect · `b` solid brush colour · `c` type a hex brush colour · `space`/`enter`/click paint the selected key |
-| **REMAP** | `f` Main/Fn layer · `r` remap (type a key name like `Caps`, or a HID usage like `0x39`) · `x` restore the factory key |
-| **MUSIC** | `p` palette · `y` style · `enter` start/stop the background service |
-| **DEVICE** | `b` backup to `./aether-backup-*.json` |
+| `m` | start / stop the music background service (uses the palette, style and brightness shown) |
+| `p` / `y` | next palette / music style (`bars`, `pulse`) |
+| `g` | apply the palette as a per-key gradient |
+| `e` / `E`, `+` / `-`, `[` / `]` | effect, brightness, speed; `a` applies the effect, `b` a solid brush colour |
+| `c` | type a hex brush colour; `space` / `enter` / click paints the selected key with it |
+| `f` | switch the Main / Fn layer |
+| `r` | remap the selected key (type a key name like `Caps`, or a HID usage like `0x39`); `x` restores its factory key |
+| `B` | back up everything to `./aether-backup-*.json` |
 
 ### CLI
 
@@ -119,8 +122,20 @@ Autostart music at login: `systemctl --user enable aether-music` after the first
 ## Firmware notes
 
 The per-key "Custom" LED mode id depends on the firmware: **253 on 1.05, 128 on 1.07+**. `aetherctl` picks it from the firmware version.
-Developed and tested on a PULSE 96 on firmware **1.07** (and 1.05 for the lighting basics). The PULSE 75 and other VOICSKY boards share much of
-the protocol but are untested and not in the udev rule.
+Developed and tested on a PULSE 96 on firmware **1.07** (and 1.05 for the lighting basics). The PULSE 75 and other VOICSKY boards share the protocol
+but are untested and not in the udev rule (see [Other VOICSKY keyboards](#other-voicsky-keyboards)).
+
+## Other VOICSKY keyboards
+
+This is built for the **PULSE 96**, but supporting other VOICSKY boards is technically possible: they all speak the same
+Aether protocol (the same `0xAA`/`0x55` frames and command ids below), and Aether's own web console drives the PULSE 75,
+ECHO 75/96 and ATMOS 87 the same way. What differs per model is small and mostly data: USB product id and HID usage page,
+the key layout, the id of the per-key "Custom" LED mode, and for some families extra features (screens on the ECHO line,
+magnetic-switch settings on the ATMOS) that this tool does not cover.
+
+**It is not done yet and I only own a PULSE 96**, so I can't test the others. If you have one, see
+[CONTRIBUTING.md](CONTRIBUTING.md) for a step by step guide to adding a model, including how to capture the protocol and
+generate the layout. Pull requests are welcome.
 
 ## How it works
 
@@ -163,4 +178,5 @@ make test          # palette and layout tests
 go vet ./...
 ```
 
-`layout.go` is generated from Aether's PULSE 96 layout (slot, pixel position, label, HID usage).
+`layout.go` is generated from Aether's PULSE 96 layout (slot, pixel position, label, HID usage) with `tools/genlayout.py`.
+See [CONTRIBUTING.md](CONTRIBUTING.md) to add a keyboard model.
