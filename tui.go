@@ -53,6 +53,7 @@ type model struct {
 	edit                                     string // "" | "brush" | "remap"
 	buf                                      string
 	bg                                       bool
+	saved                                    prefs
 	w, h                                     int
 }
 
@@ -68,16 +69,63 @@ type (
 		err error
 	}
 	keymapMsg struct{ cur []byte }
+	ledMsg    struct{ mode, bri, spd int }
 )
+
+func indexOf(list []string, s string, def int) int {
+	for i, v := range list {
+		if v == s {
+			return i
+		}
+	}
+	return def
+}
 
 func runTUI() {
 	m := model{colors: map[int]RGB{}, bri: 6, spd: 2, brush: RGB{255, 90, 90}, status: "ready"}
+	// Start from what was chosen last time, and from what the music service is really running with.
+	p := loadPrefs()
+	m.pal, m.sty = indexOf(palList, p.Palette, 0), indexOf(styles, p.Style, 0)
+	if c, err := hexRGB(p.Brush); err == nil {
+		m.brush = c
+	}
+	if p.Bright > 0 {
+		m.bri = p.Bright
+	}
+	if pal, sty, br, ok := runningMusic(); ok && bgActive() {
+		m.pal, m.sty = indexOf(palList, pal, m.pal), indexOf(styles, sty, m.sty)
+		if br >= 0 {
+			m.bri = br
+		}
+		m.status = "music service running with " + pal + " / " + sty
+	}
+	m.saved = m.prefs()
 	if _, err := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion()).Run(); err != nil {
 		die(err)
 	}
 }
 
-func (m model) Init() tea.Cmd { return tea.Batch(pollCmd(), tickCmd()) }
+func (m model) Init() tea.Cmd { return tea.Batch(pollCmd(), tickCmd(), initCmd()) }
+
+func (m model) prefs() prefs {
+	return prefs{palList[m.pal], styles[m.sty], fmt.Sprintf("%02x%02x%02x", m.brush[0], m.brush[1], m.brush[2]), m.bri}
+}
+
+// initCmd reads the board's current effect, brightness and speed so "apply" never resets what is set.
+func initCmd() tea.Cmd {
+	return func() tea.Msg {
+		d, err := Open()
+		if err != nil {
+			return nil // service owns it: keep the unit file's values
+		}
+		defer d.Close()
+		e, err := d.Read(cGetLed, 16)
+		if err != nil {
+			return nil
+		}
+		return ledMsg{mode: int(e[0]), bri: int(e[9]), spd: int(e[10])}
+	}
+}
 
 func tickCmd() tea.Cmd {
 	return tea.Tick(150*time.Millisecond, func(time.Time) tea.Msg { return tickMsg{} })
@@ -164,6 +212,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = x.ok
 		}
 		return m, pollCmd()
+	case ledMsg:
+		if x.mode >= 1 && x.mode <= len(effects) {
+			m.eff = x.mode - 1
+		}
+		if x.bri <= 6 {
+			m.bri = x.bri
+		}
+		if x.spd <= 5 {
+			m.spd = x.spd
+		}
+		m.saved = m.prefs() // values read from the board are not "choices": do not write them to the prefs file
 	case keymapMsg:
 		m.keymap = x.cur
 	case tea.MouseMsg:
@@ -189,7 +248,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case tea.KeyMsg:
-		return m.key(x)
+		nm, cmd := m.key(x)
+		if mm, ok := nm.(model); ok {
+			if p := mm.prefs(); p != mm.saved {
+				savePrefs(p)
+				mm.saved = p
+			}
+			nm = mm
+		}
+		return nm, cmd
 	}
 	return m, nil
 }
