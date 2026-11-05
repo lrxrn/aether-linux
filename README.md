@@ -107,12 +107,12 @@ Autostart music at login: `systemctl --user enable aether-music` after the first
 
 - `widgets` reads `~/.cache/desktop-widgets/colors.json` (`{"bg","fg","accent"}`, the palette an Omarchy desktop-widget setup derives from the wallpaper) and builds the same dim → accent → light ramp a cava gradient uses. If the file is missing it falls back to `theme`.
 - `theme` uses `accent` and `color1..6` from `~/.local/state/omarchy/current/theme/colors.toml`.
-- Pastel colours look white on RGB LEDs, so theme and widget colours get their saturation boosted (hue kept). Colours you type as hex are used as given.
+- Muted desktop colours look pink/white on RGB LEDs (the green and blue LEDs are much brighter than the red), so `theme` and `widgets` get a saturation boost, gamma 2.0 and a channel white-balance (`ledGain` in `pal.go`, green x0.65, blue x0.3), which turns a muted brown into amber-brown. Colours you type as hex, and `rainbow`, are used as given. Tune `ledGain` if your keyboard's LEDs differ.
 
 ## Safety
 
 - **Only one program may talk to the keyboard at a time.** `aetherctl` takes an exclusive lock and refuses to start if another instance (or the music service) holds it. Do **not** use the Aether web console at the same time: two writers on the one HID stream corrupt frames, and during development that made the board reset itself and ignore writes until its firmware was updated.
-- **Music mode rewrites the whole per-key colour table about 12 times a second.** It is not known whether the firmware commits each write to flash. Try short sessions first; the frame rate is `-fps` (default 12).
+- **Music mode writes to the keyboard up to `-fps` (default 12) times a second.** Only the packets that changed are sent (~8 ms each, a full table is ~120 ms), and audio is read on its own thread so the lights never lag behind the music. It is still not known whether the firmware commits each write to flash, so try short sessions first.
 - Key remaps and LED changes are written to the keyboard's own memory like Aether's. Take a `aetherctl backup` first.
 - No firmware update or factory reset is implemented, on purpose.
 
@@ -138,7 +138,7 @@ Requests start with `0xAA`, replies with `0x55`:
 | `0x12` / `0x22` | main keymap, 128 slots x `[type, 0, usage, 0]` (`type 2` = keyboard key) | 512 |
 | `0x16` / `0x26` | Fn layer keymap | 512 |
 | `0x13` / `0x23` | LED effect `[mode, r, g, b, 0xFF, ..., brightness@9, speed@10, ..., 0xAA, 0x55]` | 16 |
-| `0x14` / `0x24` | per-key colours, 128 x `[slot, r, g, b]` | 512 |
+| `0x14` / `0x24` | per-key colours, 128 x `[slot, r, g, b]`; a single 56-byte packet at an offset may be written on its own | 512 |
 | `0x33` | live LED colours (what is displayed now, after brightness) | 512 |
 
 `tools/` has the Playwright scripts used to launch a managed Chromium on the Aether site and log every WebHID report to `tools/hid.jsonl`, which

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -24,6 +25,7 @@ const (
 type Dev struct {
 	f    *os.File
 	Info Info
+	last []byte // last per-key table we wrote on this handle, so Paint can send only what changed
 }
 
 type Info struct {
@@ -158,7 +160,43 @@ func (d *Dev) Paint(colorOf func(Key) RGB) error {
 		c := colorOf(k)
 		copy(buf[k.Slot*4+1:k.Slot*4+4], c[:])
 	}
-	return d.Write(cSetCustom, buf)
+	if d.last == nil { // first write on this handle: send everything
+		d.last = buf
+		return d.Write(cSetCustom, buf)
+	}
+	// A full table is 10 acked packets (~120 ms); a packet is ~8 ms and the board accepts them one at a time.
+	for off := 0; off < 512; off += pkt - hdr {
+		n := min(pkt-hdr, 512-off)
+		if !bytes.Equal(buf[off:off+n], d.last[off:off+n]) {
+			if err := d.xferAt(cSetCustom, off, buf[off:off+n]); err != nil {
+				d.last = nil
+				return err
+			}
+		}
+	}
+	d.last = buf
+	return nil
+}
+
+// xferAt writes one packet at a byte offset of a table.
+func (d *Dev) xferAt(cmd byte, off int, data []byte) error {
+	f := make([]byte, pkt)
+	f[0], f[1], f[2], f[3], f[4], f[6] = 0xAA, cmd, byte(len(data)), byte(off), byte(off>>8), 1
+	copy(f[hdr:], data)
+	d.drain()
+	if _, err := d.f.Write(f); err != nil {
+		return err
+	}
+	d.f.SetReadDeadline(time.Now().Add(2 * time.Second))
+	for {
+		r := make([]byte, pkt)
+		if _, err := d.f.Read(r); err != nil {
+			return fmt.Errorf("no reply to cmd 0x%02x: %w", cmd, err)
+		}
+		if r[0] == 0x55 && r[1] == cmd {
+			return nil
+		}
+	}
 }
 
 // Live returns what the keys are showing right now (after brightness), also for built-in effects.

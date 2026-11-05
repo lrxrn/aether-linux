@@ -67,7 +67,7 @@ func runTUI() {
 func (m model) Init() tea.Cmd { return tea.Batch(pollCmd(), tickCmd()) }
 
 func tickCmd() tea.Cmd {
-	return tea.Tick(700*time.Millisecond, func(time.Time) tea.Msg { return tickMsg{} })
+	return tea.Tick(150*time.Millisecond, func(time.Time) tea.Msg { return tickMsg{} })
 }
 
 // with opens the keyboard for one operation; ErrBusy while the music service owns it.
@@ -84,6 +84,9 @@ func with(f func(*Dev) error, ok string) tea.Cmd {
 
 func pollCmd() tea.Cmd {
 	return func() tea.Msg {
+		if f := readFrame(); f != nil { // fresh frame file = the music service is running (cheaper than asking systemd)
+			return liveMsg{bg: true, c: f}
+		}
 		if bgActive() {
 			return liveMsg{bg: true}
 		}
@@ -126,11 +129,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.w, m.h = x.Width, x.Height
 	case tickMsg:
-		return m, tea.Batch(pollCmd(), tickCmd())
+		next := 700 * time.Millisecond
+		if m.bg {
+			next = 120 * time.Millisecond // music service running: follow its frames closely
+		}
+		return m, tea.Batch(pollCmd(), tea.Tick(next, func(time.Time) tea.Msg { return tickMsg{} }))
 	case liveMsg:
 		m.bg = x.bg
 		if !x.bg {
 			m.colors, m.info = x.c, x.info
+		} else if x.c != nil {
+			m.colors = x.c
 		}
 	case doneMsg:
 		if x.err != nil {
@@ -400,9 +409,6 @@ func (m model) keyboard() string {
 	}
 	for i, k := range Keys {
 		c := m.colors[k.Slot]
-		if m.bg {
-			c = RGB{40, 40, 40}
-		}
 		c0, c1, r0, r1 := keyBox(k)
 		lum := 0.3*float64(c[0]) + 0.59*float64(c[1]) + 0.11*float64(c[2])
 		text := RGB{255, 255, 255}

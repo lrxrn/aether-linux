@@ -56,10 +56,14 @@ func mix(a, b RGB, t float64) RGB {
 	return o
 }
 
+// ledGain: the green and blue LEDs are far more efficient than the red, so equal RGB looks pink/white; this white-balances
+// muted warm colours (like a brown wallpaper palette) towards amber instead.
+var ledGain = [3]float64{1, 0.65, 0.3}
+
 // gamma: LED output is linear while colours are meant for a monitor, so mid channels glare and everything looks washed out.
 func gamma(c RGB) RGB {
 	for i := range c {
-		c[i] = byte(math.Round(255 * math.Pow(float64(c[i])/255, 2.0)))
+		c[i] = byte(math.Round(255 * math.Pow(float64(c[i])/255, 2.0) * ledGain[i]))
 	}
 	return c
 }
