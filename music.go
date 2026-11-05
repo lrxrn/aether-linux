@@ -12,6 +12,12 @@ import (
 	"time"
 )
 
+// minOn is the dimmest a lit key may be; below it the key is fully off.
+const minOn = 0.4
+
+// minLevel is the dimmest brightest-channel value a lit key may have (0-255).
+const minLevel = 56
+
 const (
 	rate  = 22048
 	nSamp = 512
@@ -116,8 +122,16 @@ func Music(ctx context.Context, d *Dev, pal Palette, style string, fps int, onFr
 			} else { // anti-aliased bar: the top key of the bar fades in/out instead of switching
 				b = math.Max(0, math.Min(1, level*6-float64(5-k.Row)))
 			}
-			b = 0.1 + 0.9*b                         // faint idle glow, so silence does not look like "off"
-			return mix(RGB{}, c, math.Round(b*6)/6) // coarse steps: fewer changed packets per frame
+			// Dim levels flicker on the LEDs (low PWM duty), so a key is either off or at least minOn bright, in coarse steps
+			// (which also means fewer changed packets per frame).
+			if b = math.Round(b*5) / 5; b < minOn {
+				b = 0
+			}
+			out := mix(RGB{}, c, b)
+			if max(out[0], out[1], out[2]) < minLevel { // the palette's dark end can still land in the flicker zone
+				return RGB{}
+			}
+			return out
 		}
 		if err := d.Paint(colorOf); err != nil {
 			return err
