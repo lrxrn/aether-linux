@@ -1,0 +1,3 @@
+# Fallback if the uaccess rule does not apply in your session (no active logind seat): group access instead.
+# Add yourself to the group first:  sudo usermod -aG input $USER   (then log out and in)
+KERNEL=="hidraw*", ATTRS{idVendor}=="0c45", ATTRS{idProduct}=="8006", GROUP="input", MODE="0660"

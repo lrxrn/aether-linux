@@ -1,0 +1,5 @@
+/aether
+aether-backup-*.json
+tools/hid.jsonl
+tools/*.png
+tools/browser.log

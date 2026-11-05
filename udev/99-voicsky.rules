@@ -1,0 +1,2 @@
+# Lets the logged-in user talk to the VOICSKY PULSE 96 config interface (hidraw) without root.
+KERNEL=="hidraw*", ATTRS{idVendor}=="0c45", ATTRS{idProduct}=="8006", TAG+="uaccess"
