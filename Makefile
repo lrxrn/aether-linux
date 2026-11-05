@@ -2,9 +2,9 @@ PREFIX ?= $(HOME)/.local
 
 .PHONY: build install udev test
 build:
-	go build -o aether .
+	go build -o aetherctl .
 install: build
-	install -Dm755 aether $(PREFIX)/bin/aether
+	install -Dm755 aetherctl $(PREFIX)/bin/aetherctl
 udev:
 	sudo install -Dm644 udev/99-voicsky.rules /etc/udev/rules.d/99-voicsky.rules
 	sudo udevadm control --reload

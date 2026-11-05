@@ -1,4 +1,4 @@
-module aether
+module aetherctl
 
 go 1.24.0
 

@@ -38,12 +38,14 @@ Not included (use the Aether web console for these): macros, SOCD / advanced key
 
 ### 1. Build and install the binary
 
+The binary is called **`aetherctl`** because Arch's `aether` package (the theme generator) already owns `/usr/bin/aether`.
+
 ```sh
 git clone <this repo> aether-linux && cd aether-linux
-make install                     # builds and copies `aether` to ~/.local/bin (override with PREFIX=/usr/local)
+make install                     # builds and copies `aetherctl` to ~/.local/bin (override with PREFIX=/usr/local)
 ```
 
-or without make: `go install .` (puts `aether` in `$(go env GOBIN)` / `~/go/bin`). Make sure that directory is on your `PATH`.
+or without make: `go install .` (puts `aetherctl` in `$(go env GOBIN)` / `~/go/bin`). Make sure that directory is on your `PATH`.
 
 ### 2. Let your user talk to the keyboard (one time, needs sudo)
 
@@ -52,7 +54,7 @@ make udev
 ```
 
 That installs `udev/99-voicsky.rules` (a `uaccess` rule) and reloads udev. **Unplug and replug the keyboard.**
-Check: `ls -l /dev/hidraw*` should show an ACL (`+`) on the PULSE 96 node, and `aether info` should print the firmware.
+Check: `ls -l /dev/hidraw*` should show an ACL (`+`) on the PULSE 96 node, and `aetherctl info` should print the firmware.
 
 If you still get `permission denied` (no active logind seat, some tiling setups), use the group rule instead:
 
@@ -67,8 +69,8 @@ sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=hidraw -
 ### 3. Run it
 
 ```sh
-aether            # the TUI
-aether help       # all commands
+aetherctl            # the TUI
+aetherctl help       # all commands
 ```
 
 ## Usage
@@ -87,19 +89,19 @@ aether help       # all commands
 ### CLI
 
 ```sh
-aether info                                  # firmware, battery, profile
-aether led                                   # current effect, colour, brightness, speed
-aether color widgets|theme|rainbow|ff0000,0000ff   # per-key gradient
-aether setled -mode 8 -bright 4 -speed 2     # built-in effect 1..19
-aether setkey 94 0x62                        # remap key slot 94 (numpad .) to usage 0x62 (add -fn for the Fn layer)
-aether keymap                                # dump the keymap
-aether backup > backup.json
-aether music -palette rainbow -style pulse   # foreground, Ctrl-C stops and leaves a plain gradient
-aether bg start -palette widgets -style bars # background service (systemd user unit `aether-music`)
-aether bg status | aether bg stop
+aetherctl info                                  # firmware, battery, profile
+aetherctl led                                   # current effect, colour, brightness, speed
+aetherctl color widgets|theme|rainbow|ff0000,0000ff   # per-key gradient
+aetherctl setled -mode 8 -bright 4 -speed 2     # built-in effect 1..19
+aetherctl setkey 94 0x62                        # remap key slot 94 (numpad .) to usage 0x62 (add -fn for the Fn layer)
+aetherctl keymap                                # dump the keymap
+aetherctl backup > backup.json
+aetherctl music -palette rainbow -style pulse   # foreground, Ctrl-C stops and leaves a plain gradient
+aetherctl bg start -palette widgets -style bars # background service (systemd user unit `aether-music`)
+aetherctl bg status | aetherctl bg stop
 ```
 
-Autostart music at login: `systemctl --user enable aether-music` after the first `aether bg start`.
+Autostart music at login: `systemctl --user enable aether-music` after the first `aetherctl bg start`.
 
 ### Palettes
 
@@ -109,14 +111,14 @@ Autostart music at login: `systemctl --user enable aether-music` after the first
 
 ## Safety
 
-- **Only one program may talk to the keyboard at a time.** `aether` takes an exclusive lock and refuses to start if another instance (or the music service) holds it. Do **not** use the Aether web console at the same time: two writers on the one HID stream corrupt frames, and during development that made the board reset itself and ignore writes until its firmware was updated.
+- **Only one program may talk to the keyboard at a time.** `aetherctl` takes an exclusive lock and refuses to start if another instance (or the music service) holds it. Do **not** use the Aether web console at the same time: two writers on the one HID stream corrupt frames, and during development that made the board reset itself and ignore writes until its firmware was updated.
 - **Music mode rewrites the whole per-key colour table about 12 times a second.** It is not known whether the firmware commits each write to flash. Try short sessions first; the frame rate is `-fps` (default 12).
-- Key remaps and LED changes are written to the keyboard's own memory like Aether's. Take a `aether backup` first.
+- Key remaps and LED changes are written to the keyboard's own memory like Aether's. Take a `aetherctl backup` first.
 - No firmware update or factory reset is implemented, on purpose.
 
 ## Firmware notes
 
-The per-key "Custom" LED mode id depends on the firmware: **253 on 1.05, 128 on 1.07+**. `aether` picks it from the firmware version.
+The per-key "Custom" LED mode id depends on the firmware: **253 on 1.05, 128 on 1.07+**. `aetherctl` picks it from the firmware version.
 Developed and tested on a PULSE 96 on firmware **1.07** (and 1.05 for the lighting basics). The PULSE 75 and other VOICSKY boards share much of
 the protocol but are untested and not in the udev rule.
 
@@ -148,7 +150,7 @@ is how the frames were verified (`PLAYWRIGHT_MODULE=/path/to/playwright node too
 |---|---|
 | `Pulse 96 config interface not found` | use USB-C or the dongle, not Bluetooth; check `lsusb` shows `0c45:8006` |
 | `permission denied` on `/dev/hidraw*` | install the udev rule and **replug**; or use the group rule above |
-| `another aether process is using the keyboard` | `aether bg stop`, close other TUI / Aether tabs |
+| `another aetherctl process is using the keyboard` | `aetherctl bg stop`, close other TUI / Aether tabs |
 | writes are ignored, everything reads fine | power-cycle by unplugging; update the firmware with Aether (that fixed it once) |
 | colours look white | pick a more saturated palette or hex colours; check brightness |
 | TUI looks garbled | needs a truecolor terminal at least 120 columns wide |

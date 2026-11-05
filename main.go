@@ -15,7 +15,7 @@ import (
 )
 
 func die(err error) {
-	fmt.Fprintln(os.Stderr, "aether:", err)
+	fmt.Fprintln(os.Stderr, "aetherctl:", err)
 	os.Exit(1)
 }
 
@@ -26,14 +26,14 @@ func must[T any](v T, err error) T {
 	return v
 }
 
-const usage = `aether - VOICSKY PULSE 96 control (TUI by default)
-  aether                     terminal UI
-  aether info | led | keymap | backup > file.json
-  aether color [widgets|theme|rainbow|RRGGBB,RRGGBB...]   per-key gradient
-  aether setled [-mode N] [-rgb RRGGBB] [-bright 0-5] [-speed 0-5]
-  aether setkey [-fn] SLOT USAGE   remap a key slot to a HID usage (e.g. 0x29)
-  aether music [-palette P] [-style bars|pulse] [-fps 12]   audio-reactive (Ctrl-C stops)
-  aether bg start|stop|status [-palette P] [-style S]       run music as a systemd user service`
+const usage = `aetherctl - VOICSKY PULSE 96 control (TUI by default)
+  aetherctl                     terminal UI
+  aetherctl info | led | keymap | backup > file.json
+  aetherctl color [widgets|theme|rainbow|RRGGBB,RRGGBB...]   per-key gradient
+  aetherctl setled [-mode N] [-rgb RRGGBB] [-bright 0-5] [-speed 0-5]
+  aetherctl setkey [-fn] SLOT USAGE   remap a key slot to a HID usage (e.g. 0x29)
+  aetherctl music [-palette P] [-style bars|pulse] [-fps 12]   audio-reactive (Ctrl-C stops)
+  aetherctl bg start|stop|status [-palette P] [-style S]       run music as a systemd user service`
 
 func main() {
 	cmd := "tui"
@@ -106,7 +106,7 @@ func main() {
 		fn := fs.Bool("fn", false, "edit the Fn layer")
 		fs.Parse(args)
 		if fs.NArg() != 2 {
-			die(fmt.Errorf("usage: aether setkey [-fn] SLOT USAGE"))
+			die(fmt.Errorf("usage: aetherctl setkey [-fn] SLOT USAGE"))
 		}
 		slot, usage := must(strconv.Atoi(fs.Arg(0))), must(strconv.ParseInt(fs.Arg(1), 0, 32))
 		if slot < 0 || slot > 127 {
@@ -177,7 +177,7 @@ func bgStart(palette, style string) error {
 
 func bg(args []string) {
 	if len(args) == 0 {
-		die(fmt.Errorf("usage: aether bg start|stop|status"))
+		die(fmt.Errorf("usage: aetherctl bg start|stop|status"))
 	}
 	fs := flag.NewFlagSet("bg", flag.ExitOnError)
 	p, style := fs.String("palette", "widgets", ""), fs.String("style", "bars", "")

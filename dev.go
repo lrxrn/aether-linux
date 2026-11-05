@@ -33,7 +33,7 @@ type Info struct {
 	Profile  int
 }
 
-var ErrBusy = errors.New("another aether process is using the keyboard (stop the music service / TUI first)")
+var ErrBusy = errors.New("another aetherctl process is using the keyboard (stop the music service / TUI first)")
 
 func findHidraw() (string, error) {
 	dirs, _ := filepath.Glob("/sys/class/hidraw/hidraw*")

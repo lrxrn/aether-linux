@@ -80,7 +80,7 @@ func Music(ctx context.Context, d *Dev, pal Palette, style string, fps int, onFr
 			if float64(5-k.Row) < lv[band]*6 {
 				return c
 			}
-			return RGB{}
+			return mix(RGB{}, c, 0.1) // faint idle glow, so silence does not look like "off"
 		}
 		if err := d.Paint(colorOf); err != nil {
 			return err

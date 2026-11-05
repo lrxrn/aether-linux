@@ -1,4 +1,4 @@
-/aether
+/aetherctl
 aether-backup-*.json
 tools/hid.jsonl
 tools/*.png
