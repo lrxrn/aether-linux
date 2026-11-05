@@ -180,3 +180,9 @@ go vet ./...
 
 `layout.go` is generated from Aether's PULSE 96 layout (slot, pixel position, label, HID usage) with `tools/genlayout.py`.
 See [CONTRIBUTING.md](CONTRIBUTING.md) to add a keyboard model.
+
+## License
+
+[MIT](LICENSE). "VOICSKY" and "Aether" are names of their respective owners; this project is independent and only documents how
+to talk to the hardware. Key layouts in `layout.go` are data about the keyboard generated from what Aether's web console serves.
+Uses [Bubble Tea](https://github.com/charmbracelet/bubbletea) (MIT).
