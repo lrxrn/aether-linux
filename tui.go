@@ -114,9 +114,16 @@ func (m model) prefs() prefs {
 // initCmd reads the board's current effect, brightness and speed so "apply" never resets what is set.
 func initCmd() tea.Cmd {
 	return func() tea.Msg {
-		d, err := Open()
+		var d *Dev
+		var err error
+		for i := 0; i < 8; i++ { // the first poll may hold the lock for a moment
+			if d, err = Open(); err != ErrBusy {
+				break
+			}
+			time.Sleep(120 * time.Millisecond)
+		}
 		if err != nil {
-			return nil // service owns it: keep the unit file's values
+			return nil // the music service owns it: keep the unit file's values
 		}
 		defer d.Close()
 		e, err := d.Read(cGetLed, 16)
@@ -152,7 +159,9 @@ func pollCmd() tea.Cmd {
 			return liveMsg{bg: true}
 		}
 		d, err := Open()
-		if err != nil {
+		if err == ErrBusy {
+			return nil // someone else (a button press, the service) has it this instant: skip this poll quietly
+		} else if err != nil {
 			return doneMsg{err: err}
 		}
 		defer d.Close()
