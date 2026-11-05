@@ -56,7 +56,15 @@ func mix(a, b RGB, t float64) RGB {
 	return o
 }
 
-// vivid: pastel colours wash out to white on RGB LEDs, so push saturation up; keepValue keeps the dim->bright ramp.
+// gamma: LED output is linear while colours are meant for a monitor, so mid channels glare and everything looks washed out.
+func gamma(c RGB) RGB {
+	for i := range c {
+		c[i] = byte(math.Round(255 * math.Pow(float64(c[i])/255, 2.0)))
+	}
+	return c
+}
+
+// vivid: pastel colours wash out to white on RGB LEDs, so push saturation up and gamma-correct; keepValue keeps the dim->bright ramp.
 func vivid(cols []RGB, keepValue bool) []RGB {
 	type hsv struct{ h, s, v float64 }
 	hs, top := make([]hsv, len(cols)), 0.0
@@ -71,7 +79,7 @@ func vivid(cols []RGB, keepValue bool) []RGB {
 		if keepValue && top > 0 {
 			v = x.v / top
 		}
-		out[i] = hsv2rgb(x.h, x.s, v)
+		out[i] = gamma(hsv2rgb(x.h, x.s, v))
 	}
 	return out
 }
