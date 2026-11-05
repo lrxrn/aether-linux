@@ -112,7 +112,7 @@ Autostart music at login: `systemctl --user enable aether-music` after the first
 ## Safety
 
 - **Only one program may talk to the keyboard at a time.** `aetherctl` takes an exclusive lock and refuses to start if another instance (or the music service) holds it. Do **not** use the Aether web console at the same time: two writers on the one HID stream corrupt frames, and during development that made the board reset itself and ignore writes until its firmware was updated.
-- **Music mode writes to the keyboard up to `-fps` (default 12) times a second.** Only the packets that changed are sent (~8 ms each, a full table is ~120 ms), and audio is read on its own thread so the lights never lag behind the music. It is still not known whether the firmware commits each write to flash, so try short sessions first.
+- **Music mode writes to the keyboard up to `-fps` (default 20) times a second.** Only the packets that changed are sent (~8 ms each, a full table is ~120 ms), and audio is read on its own thread so the lights never lag behind the music. It is still not known whether the firmware commits each write to flash, so try short sessions first.
 - Key remaps and LED changes are written to the keyboard's own memory like Aether's. Take a `aetherctl backup` first.
 - No firmware update or factory reset is implemented, on purpose.
 

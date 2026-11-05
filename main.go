@@ -124,7 +124,7 @@ func main() {
 		json.NewEncoder(os.Stdout).Encode(out)
 	case "music":
 		fs := flag.NewFlagSet("music", flag.ExitOnError)
-		p, style, fps := fs.String("palette", "widgets", ""), fs.String("style", "bars", "bars|pulse"), fs.Int("fps", 12, "")
+		p, style, fps := fs.String("palette", "widgets", ""), fs.String("style", "bars", "bars|pulse"), fs.Int("fps", 20, "")
 		fs.Parse(args)
 		pal := must(NewPalette(*p))
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

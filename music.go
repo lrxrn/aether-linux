@@ -89,21 +89,35 @@ func Music(ctx context.Context, d *Dev, pal Palette, style string, fps int, onFr
 			e[i] = goertzel(smp, f)
 			mx = math.Max(mx, e[i])
 		}
-		peak = math.Max(math.Max(peak*0.99, mx), 50) // auto-gain
-		for i := range lv {
-			lv[i] = math.Max(lv[i]*0.7, math.Min(1, e[i]/peak)) // fast attack, soft decay
+		peak = math.Max(math.Max(peak*0.998, mx), 50) // auto-gain, slow release so quiet passages do not blow up
+		var tgt [bands]float64
+		for i := range tgt { // blend neighbouring bands, then gate out tiny levels
+			l, r := e[max(0, i-1)], e[min(bands-1, i+1)]
+			tgt[i] = math.Min(1, (0.25*l+0.5*e[i]+0.25*r)/peak)
+			if tgt[i] < 0.05 {
+				tgt[i] = 0
+			}
+		}
+		for i := range lv { // rise quickly but not instantly, fall slowly: no more snapping on/off
+			if tgt[i] > lv[i] {
+				lv[i] += (tgt[i] - lv[i]) * 0.55
+			} else {
+				lv[i] = math.Max(tgt[i], lv[i]*0.9)
+			}
 		}
 		shift := math.Floor(time.Since(t0).Seconds()*0.05*32) / 32 // stepped, so lit keys do not change colour (and need resending) every frame
 		colorOf := func(k Key) RGB {
 			band := min(bands-1, int(keyX(k)*bands))
 			c := pal(keyX(k) + shift)
+			level := math.Min(1, lv[band]*1.4) // headroom: loud music should reach the top row
+			var b float64
 			if style == "pulse" {
-				return mix(RGB{}, c, math.Round(math.Min(1, lv[band]*1.5)*8)/8)
+				b = level
+			} else { // anti-aliased bar: the top key of the bar fades in/out instead of switching
+				b = math.Max(0, math.Min(1, level*6-float64(5-k.Row)))
 			}
-			if float64(5-k.Row) < lv[band]*6 {
-				return c
-			}
-			return mix(RGB{}, c, 0.1) // faint idle glow, so silence does not look like "off"
+			b = 0.1 + 0.9*b                         // faint idle glow, so silence does not look like "off"
+			return mix(RGB{}, c, math.Round(b*6)/6) // coarse steps: fewer changed packets per frame
 		}
 		if err := d.Paint(colorOf); err != nil {
 			return err
