@@ -96,8 +96,8 @@ aetherctl setled -mode 8 -bright 4 -speed 2     # built-in effect 1..19
 aetherctl setkey 94 0x62                        # remap key slot 94 (numpad .) to usage 0x62 (add -fn for the Fn layer)
 aetherctl keymap                                # dump the keymap
 aetherctl backup > backup.json
-aetherctl music -palette rainbow -style pulse   # foreground, Ctrl-C stops and leaves a plain gradient
-aetherctl bg start -palette widgets -style bars # background service (systemd user unit `aether-music`)
+aetherctl music -palette rainbow -style pulse -bright 4   # foreground, Ctrl-C stops and leaves a plain gradient
+aetherctl bg start -palette widgets -style bars [-bright 0-6] # background service (systemd user unit `aether-music`)
 aetherctl bg status | aetherctl bg stop
 ```
 

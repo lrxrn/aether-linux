@@ -25,10 +25,23 @@ var (
 )
 
 const (
-	pxPerCol = 10 // layout px -> terminal columns
-	kbTop    = 3  // screen row where the keyboard starts
-	rowH     = 3  // text rows per key row (2 coloured + 1 gap)
+	kbTop = 3 // screen row where the keyboard starts
+	rowH  = 3 // text rows per key row (2 coloured + 1 gap)
 )
+
+// ppc: layout pixels per terminal column; widened on narrow terminals so the whole board still fits.
+var ppc = 10
+
+func fitScale(w int) {
+	switch {
+	case w == 0 || w >= 122:
+		ppc = 10
+	case w >= 104:
+		ppc = 12
+	default:
+		ppc = 14
+	}
+}
 
 type model struct {
 	tab, cur, layer, eff, bri, spd, pal, sty int
@@ -106,7 +119,9 @@ func pollCmd() tea.Cmd {
 func keymapCmd(fn bool) tea.Cmd {
 	return func() tea.Msg {
 		d, err := Open()
-		if err != nil {
+		if err == ErrBusy {
+			return doneMsg{err: fmt.Errorf("the music service owns the keyboard: stop it (MUSIC tab, enter) to edit keys")}
+		} else if err != nil {
 			return doneMsg{err: err}
 		}
 		defer d.Close()
@@ -128,6 +143,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch x := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.w, m.h = x.Width, x.Height
+		fitScale(x.Width)
 	case tickMsg:
 		next := 700 * time.Millisecond
 		if m.bg {
@@ -152,6 +168,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.keymap = x.cur
 	case tea.MouseMsg:
 		if x.Action == tea.MouseActionPress && x.Button == tea.MouseButtonLeft {
+			if x.Y == 1 { // tab bar
+				at := 0
+				for i, tb := range tabs {
+					if x.X >= at && x.X < at+len(tb)+5 {
+						m.tab = i
+						return m.enterTab()
+					}
+					at += len(tb) + 6
+				}
+			}
 			for i, k := range Keys {
 				c0, c1, r0, r1 := keyBox(k)
 				if x.X >= c0 && x.X < c1 && x.Y >= kbTop+r0 && x.Y < kbTop+r1 {
@@ -169,7 +195,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func keyBox(k Key) (c0, c1, r0, r1 int) {
-	c0, c1 = k.X/pxPerCol, (k.X+k.W)/pxPerCol-1
+	c0, c1 = k.X/ppc, (k.X+k.W)/ppc-1
 	r0 = k.Row * rowH
 	r1 = r0 + 2
 	if k.H > 56 {
@@ -314,9 +340,9 @@ func (m model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 					return doneMsg{ok: "music stopped", err: exec.Command("systemctl", "--user", "stop", unitName).Run()}
 				}
 			}
-			pal, sty := palList[m.pal], styles[m.sty]
+			pal, sty, bri := palList[m.pal], styles[m.sty], m.bri
 			return m, func() tea.Msg {
-				return doneMsg{ok: "music running in the background · you can quit the TUI", err: bgStart(pal, sty)}
+				return doneMsg{ok: "music running in the background · you can quit the TUI", err: bgStart(pal, sty, bri)}
 			}
 		}
 	case 3:
@@ -399,7 +425,7 @@ func (m model) keyboard() string {
 		bg RGB
 		on bool
 	}
-	cols, rows := 1172/pxPerCol+1, 6*rowH+3
+	cols, rows := 1172/ppc+1, 6*rowH+3
 	grid := make([][]cell, rows)
 	for i := range grid {
 		grid[i] = make([]cell, cols)
@@ -476,6 +502,7 @@ func (m model) View() string {
 	sw := func(c RGB) string { return bgc(c) + "  " + reset }
 	switch m.tab {
 	case 0:
+		fmt.Fprintf(&sb, "   preview %s\n", strip(palList[m.pal], 40))
 		fmt.Fprintf(&sb, "%s┤ colour ├%s palette %s%s%s   brush %s #%02x%02x%02x   (g apply gradient · p palette · c brush · space/click paint key · b solid)\n",
 			acc, reset, acc, palList[m.pal], reset, sw(m.brush), m.brush[0], m.brush[1], m.brush[2])
 		fmt.Fprintf(&sb, "%s┤ effect ├%s %s%d/%d %s%s   bright %s   speed %s   (e/E effect · +/- bright · [ ] speed · a apply)\n",
@@ -495,8 +522,13 @@ func (m model) View() string {
 		if m.bg {
 			st = acc + "RUNNING in background" + reset
 		}
-		fmt.Fprintf(&sb, "%s┤ music ├%s %s   palette %s%s%s   style %s%s%s\n   p palette · y style · enter start/stop (a systemd user service: keeps running after you quit)\n",
-			acc, reset, st, acc, palList[m.pal], reset, acc, styles[m.sty], reset)
+		fmt.Fprintf(&sb, "%s┤ music ├%s %s   palette %s%s%s %s   style %s%s%s   bright %s\n", acc, reset, st, acc, palList[m.pal], reset, strip(palList[m.pal], 24), acc, styles[m.sty], reset, bar(m.bri))
+		if m.bg {
+			fmt.Fprintf(&sb, "   %s%s%s\n", acc, m.meter(), reset)
+		} else {
+			sb.WriteString("   (start the service to see the level meter)\n")
+		}
+		sb.WriteString("   p palette · y style · +/- brightness · enter start/stop (a systemd user service: keeps running after you quit)\n")
 	case 3:
 		fmt.Fprintf(&sb, "%s┤ device ├%s firmware %.2f · %s · profile %d\n   b backup everything to ./aether-backup-*.json\n   macros, SOCD and factory reset are intentionally not in the TUI (use the Aether web console)\n",
 			acc, reset, m.info.Version, map[bool]string{true: "charging/wired", false: "wired"}[m.info.Charging], m.info.Profile+1)
@@ -510,3 +542,32 @@ func (m model) View() string {
 }
 
 func bar(n int) string { return strings.Repeat("■", n) + strings.Repeat("□", max(0, 6-n)) }
+
+// strip previews a palette as a row of coloured cells.
+func strip(name string, n int) string {
+	p, err := NewPalette(name)
+	if err != nil {
+		return ""
+	}
+	var sb strings.Builder
+	for i := 0; i < n; i++ {
+		sb.WriteString(bgc(p(float64(i)/float64(n-1)/2)) + " ")
+	}
+	return sb.String() + reset
+}
+
+// meter draws one block per frequency band from how many keys of that column are lit in the music frame.
+func (m model) meter() string {
+	const blocks = "▁▂▃▄▅▆▇█"
+	var cnt [bands]int
+	for _, k := range Keys {
+		if c := m.colors[k.Slot]; max(c[0], c[1], c[2]) > 0 && k.Row > 0 {
+			cnt[min(bands-1, int(keyX(k)*bands))]++
+		}
+	}
+	var sb strings.Builder
+	for _, c := range cnt {
+		sb.WriteString(strings.Repeat(string([]rune(blocks)[min(7, c*8/6)]), 2) + " ")
+	}
+	return sb.String()
+}

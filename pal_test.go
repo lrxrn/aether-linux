@@ -16,8 +16,9 @@ func TestHexAndPalette(t *testing.T) {
 	if p(0) != (RGB{255, 0, 0}) || p(0.5) != (RGB{0, 0, 255}) || p(1) != p(0) { // bounces: no seam at the wrap
 		t.Fatalf("gradient ends wrong: %v %v %v", p(0), p(0.5), p(1))
 	}
-	if g := vivid([]RGB{{151, 159, 236}}, false)[0]; g[2] != 255 || g[0] > 60 { // pastel -> saturated
-		t.Fatalf("vivid left it washed out: %v", g)
+	g := vivid([]RGB{{151, 159, 236}}, false)[0] // pastel -> saturated (hue kept: still blue-dominant)
+	if _, s, _ := rgb2hsv(g); s < 0.9 || g[2] <= g[0] {
+		t.Fatalf("vivid left it washed out: %v (sat %.2f)", g, s)
 	}
 }
 

@@ -124,18 +124,27 @@ func main() {
 		json.NewEncoder(os.Stdout).Encode(out)
 	case "music":
 		fs := flag.NewFlagSet("music", flag.ExitOnError)
-		p, style, fps := fs.String("palette", "widgets", ""), fs.String("style", "bars", "bars|pulse"), fs.Int("fps", 20, "")
+		p, style, fps := fs.String("palette", "widgets", ""), fs.String("style", "bars", "bars|pulse"), fs.Int("fps", 15, "")
+		bright := fs.Int("bright", -1, "board brightness 0-6 (default: leave as is)")
 		fs.Parse(args)
 		pal := must(NewPalette(*p))
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
-		if err := Music(ctx, d, pal, *style, *fps, nil); err != nil {
+		if err := Music(ctx, d, MusicOpts{Pal: pal, Style: *style, FPS: *fps, Drift: drift(*p), Bright: *bright}, nil); err != nil {
 			die(err)
 		}
 	default:
 		fmt.Println(usage)
 		os.Exit(2)
 	}
+}
+
+// drift: only rainbow slides along the keyboard; a drifting brown gradient just makes lit keys change colour.
+func drift(palette string) float64 {
+	if palette == "rainbow" {
+		return 0.02
+	}
+	return 0
 }
 
 func setKey(d *Dev, fn bool, slot int, usage byte) error {
@@ -161,11 +170,11 @@ func bgActive() bool {
 	return exec.Command("systemctl", "--user", "is-active", "--quiet", unitName).Run() == nil
 }
 
-func bgStart(palette, style string) error {
+func bgStart(palette, style string, bright int) error {
 	exe, _ := os.Executable()
 	dir := home(".config/systemd/user")
 	os.MkdirAll(dir, 0o755)
-	unit := fmt.Sprintf("[Unit]\nDescription=Aether music-reactive keyboard lighting\n\n[Service]\nExecStart=%s music -palette %s -style %s\nRestart=on-failure\nRestartSec=3\n\n[Install]\nWantedBy=default.target\n", exe, palette, style)
+	unit := fmt.Sprintf("[Unit]\nDescription=Aether music-reactive keyboard lighting\n\n[Service]\nExecStart=%s music -palette %s -style %s -bright %d\nRestart=on-failure\nRestartSec=3\n\n[Install]\nWantedBy=default.target\n", exe, palette, style, bright)
 	if err := os.WriteFile(dir+"/"+unitName+".service", []byte(unit), 0o644); err != nil {
 		return err
 	}
@@ -181,13 +190,14 @@ func bg(args []string) {
 	}
 	fs := flag.NewFlagSet("bg", flag.ExitOnError)
 	p, style := fs.String("palette", "widgets", ""), fs.String("style", "bars", "")
+	bright := fs.Int("bright", -1, "board brightness 0-6 (default: leave as is)")
 	fs.Parse(args[1:])
 	switch args[0] {
 	case "start":
 		if _, err := NewPalette(*p); err != nil {
 			die(err)
 		}
-		if err := bgStart(*p, *style); err != nil {
+		if err := bgStart(*p, *style, *bright); err != nil {
 			die(err)
 		}
 		time.Sleep(300 * time.Millisecond)

@@ -18,6 +18,9 @@ const minOn = 0.4
 // minLevel is the dimmest brightest-channel value a lit key may have (0-255).
 const minLevel = 56
 
+// holdFor is the minimum time between small brightness changes of one key.
+const holdFor = 140 * time.Millisecond
+
 const (
 	rate  = 22048
 	nSamp = 512
@@ -35,7 +38,18 @@ func goertzel(buf []float64, freq float64) float64 {
 
 // Music lights the keys from the default audio output until ctx ends, then leaves a plain gradient (not a frozen frame).
 // style "bars": 17 log-spaced bands rise through the key rows; "pulse": whole board brightens with the band under each key.
-func Music(ctx context.Context, d *Dev, pal Palette, style string, fps int, onFrame func(map[int]RGB)) error {
+// MusicOpts configures Music. Drift is how fast the palette slides along the keyboard (0 = fixed; only worth it for rainbow).
+// Bright is the board brightness to set (-1 = leave it).
+type MusicOpts struct {
+	Pal    Palette
+	Style  string
+	FPS    int
+	Drift  float64
+	Bright int
+}
+
+func Music(ctx context.Context, d *Dev, o MusicOpts, onFrame func(map[int]RGB)) error {
+	pal, style, fps := o.Pal, o.Style, o.FPS
 	sink, err := exec.Command("pactl", "get-default-sink").Output()
 	if err != nil {
 		return err
@@ -52,7 +66,7 @@ func Music(ctx context.Context, d *Dev, pal Palette, style string, fps int, onFr
 	defer cmd.Wait()
 	defer func() { d.Paint(func(k Key) RGB { return pal(keyX(k)) }) }()
 
-	if err := d.SetMode(d.CustomMode(), nil, -1, -1); err != nil {
+	if err := d.SetMode(d.CustomMode(), nil, o.Bright, -1); err != nil {
 		return err
 	}
 	freqs := make([]float64, bands)
@@ -78,6 +92,8 @@ func Music(ctx context.Context, d *Dev, pal Palette, style string, fps int, onFr
 		}
 	}()
 	var lv [bands]float64
+	var held [128]float64
+	var since [128]time.Time
 	peak, t0, smp := 1e-3, time.Now(), make([]float64, nSamp)
 	tick := time.NewTicker(time.Second / time.Duration(fps))
 	defer tick.Stop()
@@ -111,35 +127,40 @@ func Music(ctx context.Context, d *Dev, pal Palette, style string, fps int, onFr
 				lv[i] = math.Max(tgt[i], lv[i]*0.9)
 			}
 		}
-		shift := math.Floor(time.Since(t0).Seconds()*0.05*32) / 32 // stepped, so lit keys do not change colour (and need resending) every frame
-		colorOf := func(k Key) RGB {
+		shift := math.Floor(time.Since(t0).Seconds()*o.Drift*64) / 64 // stepped, so lit keys do not change colour every frame
+		now := time.Now()
+		frame := map[int]RGB{}
+		for _, k := range Keys {
 			band := min(bands-1, int(keyX(k)*bands))
-			c := pal(keyX(k) + shift)
 			level := math.Min(1, lv[band]*1.4) // headroom: loud music should reach the top row
-			var b float64
-			if style == "pulse" {
-				b = level
-			} else { // anti-aliased bar: the top key of the bar fades in/out instead of switching
-				b = math.Max(0, math.Min(1, level*6-float64(5-k.Row)))
+			raw := level
+			if style != "pulse" { // anti-aliased bar: the top key of the bar fades in/out instead of switching
+				raw = math.Max(0, math.Min(1, level*6-float64(5-k.Row)))
 			}
-			// Dim levels flicker on the LEDs (low PWM duty), so a key is either off or at least minOn bright, in coarse steps
-			// (which also means fewer changed packets per frame).
-			if b = math.Round(b*5) / 5; b < minOn {
+			// Dim levels flicker on the LEDs (low PWM duty): a key is off or at least minOn bright, in coarse steps.
+			b := math.Round(raw*5) / 5
+			if b < minOn {
 				b = 0
 			}
-			out := mix(RGB{}, c, b)
-			if max(out[0], out[1], out[2]) < minLevel { // the palette's dark end can still land in the flicker zone
-				return RGB{}
+			// Per key: a dead band around the current level (ignore wobble near a step) and a minimum hold time, so a key
+			// that is lit does not twitch between two levels.
+			if h := held[k.Slot]; b != h {
+				if math.Abs(raw-h) < 0.3 || (now.Sub(since[k.Slot]) < holdFor && math.Abs(b-h) < 0.5) {
+					b = h
+				} else {
+					held[k.Slot], since[k.Slot] = b, now
+				}
 			}
-			return out
+			c := mix(RGB{}, pal(keyX(k)+shift), b)
+			if max(c[0], c[1], c[2]) < minLevel { // the palette's dark end can still land in the flicker zone
+				c = RGB{}
+			}
+			frame[k.Slot] = c
 		}
-		if err := d.Paint(colorOf); err != nil {
+		if err := d.Paint(func(k Key) RGB { return frame[k.Slot] }); err != nil {
 			return err
 		}
-		m := map[int]RGB{}
-		for _, k := range Keys {
-			m[k.Slot] = colorOf(k)
-		}
+		m := frame
 		writeFrame(m)
 		if onFrame != nil {
 			onFrame(m)
