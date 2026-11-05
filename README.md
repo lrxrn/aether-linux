@@ -20,7 +20,7 @@ A native Linux **terminal UI and CLI for the VOICSKY PULSE 96** keyboard: lighti
 |---|---|
 | **Lighting** | the 19 built-in effects with brightness and speed, solid colour, per-key custom colours (click a key or move with the arrows and press space) |
 | **Palettes** | `widgets` (your wallpaper palette), `theme` (Omarchy theme), `rainbow`, or your own `RRGGBB,RRGGBB,...` |
-| **Music mode** | keys react to whatever your default audio output is playing (`bars` or `pulse`), palette-aware, runs as a **background systemd user service** so it keeps going after you close the TUI |
+| **Music mode** | (live frames, no flash writes) keys react to whatever your default audio output is playing (`bars` or `pulse`), palette-aware, runs as a **background systemd user service** so it keeps going after you close the TUI |
 | **Remap** | Main and Fn layer, by key name or HID usage, restore to the factory layout |
 | **Live view** | the TUI reads the real LED colours back from the keyboard, so effects show up on screen too |
 | **Backup** | dump settings, both keymaps and the LED state to JSON |
@@ -112,7 +112,7 @@ Autostart music at login: `systemctl --user enable aether-music` after the first
 ## Safety
 
 - **Only one program may talk to the keyboard at a time.** `aetherctl` takes an exclusive lock and refuses to start if another instance (or the music service) holds it. Do **not** use the Aether web console at the same time: two writers on the one HID stream corrupt frames, and during development that made the board reset itself and ignore writes until its firmware was updated.
-- **Music mode writes to the keyboard up to `-fps` (default 20) times a second.** Only the packets that changed are sent (~8 ms each, a full table is ~120 ms), and audio is read on its own thread so the lights never lag behind the music. It is still not known whether the firmware commits each write to flash, so try short sessions first.
+- **Music mode streams live frames (command `0x32`)**, the same channel VOICSKY's old Windows music app used. They never touch the keyboard's stored colours or flash, only changed keys are sent, and the board falls back to the stored gradient about 2 s after the last frame (so stopping or crashing leaves no frozen frame).
 - Key remaps and LED changes are written to the keyboard's own memory like Aether's. Take a `aetherctl backup` first.
 - No firmware update or factory reset is implemented, on purpose.
 
@@ -139,6 +139,7 @@ Requests start with `0xAA`, replies with `0x55`:
 | `0x16` / `0x26` | Fn layer keymap | 512 |
 | `0x13` / `0x23` | LED effect `[mode, r, g, b, 0xFF, ..., brightness@9, speed@10, ..., 0xAA, 0x55]` | 16 |
 | `0x14` / `0x24` | per-key colours, 128 x `[slot, r, g, b]`; a single 56-byte packet at an offset may be written on its own | 512 |
+| `0x32` | **live frame** `[slot r g b]...` + trailer `AA 55`, 56-byte packets, partial frames allowed, ~2 s timeout then back to the stored table, no flash writes, bypasses brightness (found in VOICSKY's Windows music helper) | up to 514 |
 | `0x33` | live LED colours (what is displayed now, after brightness) | 512 |
 
 `tools/` has the Playwright scripts used to launch a managed Chromium on the Aether site and log every WebHID report to `tools/hid.jsonl`, which

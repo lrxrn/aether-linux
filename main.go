@@ -124,7 +124,7 @@ func main() {
 		json.NewEncoder(os.Stdout).Encode(out)
 	case "music":
 		fs := flag.NewFlagSet("music", flag.ExitOnError)
-		p, style, fps := fs.String("palette", "widgets", ""), fs.String("style", "bars", "bars|pulse"), fs.Int("fps", 15, "")
+		p, style, fps := fs.String("palette", "widgets", ""), fs.String("style", "bars", "bars|pulse"), fs.Int("fps", 30, "")
 		bright := fs.Int("bright", -1, "board brightness 0-6 (default: leave as is)")
 		fs.Parse(args)
 		pal := must(NewPalette(*p))

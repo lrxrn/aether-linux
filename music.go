@@ -13,13 +13,13 @@ import (
 )
 
 // minOn is the dimmest a lit key may be; below it the key is fully off.
-const minOn = 0.4
+const minOn = 0.25
 
 // minLevel is the dimmest brightest-channel value a lit key may have (0-255).
-const minLevel = 56
+const minLevel = 36
 
 // holdFor is the minimum time between small brightness changes of one key.
-const holdFor = 140 * time.Millisecond
+const holdFor = 90 * time.Millisecond
 
 const (
 	rate  = 22048
@@ -64,10 +64,26 @@ func Music(ctx context.Context, d *Dev, o MusicOpts, onFrame func(map[int]RGB)) 
 		return err
 	}
 	defer cmd.Wait()
-	defer func() { d.Paint(func(k Key) RGB { return pal(keyX(k)) }) }()
-
+	// Live frames fall back to the stored per-key table when they stop, so store the plain gradient first: stopping (or a
+	// crash) leaves that, not a frozen frame.
+	grad := func(k Key) RGB { return pal(keyX(k)) }
 	if err := d.SetMode(d.CustomMode(), nil, o.Bright, -1); err != nil {
 		return err
+	}
+	if err := d.Paint(grad); err != nil {
+		return err
+	}
+	defer func() {
+		var all []byte
+		for _, k := range Keys {
+			c := grad(k)
+			all = append(all, byte(k.Slot), c[0], c[1], c[2])
+		}
+		d.Stream(all) // show it immediately instead of waiting for the fallback
+	}()
+	scale := 1.0 // live frames bypass the board brightness, so apply it here
+	if o.Bright >= 0 {
+		scale = float64(o.Bright) / 6
 	}
 	freqs := make([]float64, bands)
 	for i := range freqs {
@@ -93,6 +109,8 @@ func Music(ctx context.Context, d *Dev, o MusicOpts, onFrame func(map[int]RGB)) 
 	}()
 	var lv [bands]float64
 	var held [128]float64
+	var shown [128]RGB
+	lastFull := time.Time{}
 	var since [128]time.Time
 	peak, t0, smp := 1e-3, time.Now(), make([]float64, nSamp)
 	tick := time.NewTicker(time.Second / time.Duration(fps))
@@ -138,27 +156,41 @@ func Music(ctx context.Context, d *Dev, o MusicOpts, onFrame func(map[int]RGB)) 
 				raw = math.Max(0, math.Min(1, level*6-float64(5-k.Row)))
 			}
 			// Dim levels flicker on the LEDs (low PWM duty): a key is off or at least minOn bright, in coarse steps.
-			b := math.Round(raw*5) / 5
+			b := math.Round(raw*8) / 8
 			if b < minOn {
 				b = 0
 			}
 			// Per key: a dead band around the current level (ignore wobble near a step) and a minimum hold time, so a key
 			// that is lit does not twitch between two levels.
 			if h := held[k.Slot]; b != h {
-				if math.Abs(raw-h) < 0.3 || (now.Sub(since[k.Slot]) < holdFor && math.Abs(b-h) < 0.5) {
+				if math.Abs(raw-h) < 0.2 || (now.Sub(since[k.Slot]) < holdFor && math.Abs(b-h) < 0.4) {
 					b = h
 				} else {
 					held[k.Slot], since[k.Slot] = b, now
 				}
 			}
-			c := mix(RGB{}, pal(keyX(k)+shift), b)
+			c := mix(RGB{}, pal(keyX(k)+shift), b*scale)
 			if max(c[0], c[1], c[2]) < minLevel { // the palette's dark end can still land in the flicker zone
 				c = RGB{}
 			}
 			frame[k.Slot] = c
 		}
-		if err := d.Paint(func(k Key) RGB { return frame[k.Slot] }); err != nil {
-			return err
+		// Send only the keys that changed; resend everything once a second to keep the live frame from timing out.
+		keepalive := now.Sub(lastFull) > time.Second
+		var ent []byte
+		for _, k := range Keys {
+			if c := frame[k.Slot]; keepalive || c != shown[k.Slot] {
+				ent = append(ent, byte(k.Slot), c[0], c[1], c[2])
+				shown[k.Slot] = c
+			}
+		}
+		if keepalive {
+			lastFull = now
+		}
+		if len(ent) > 0 {
+			if err := d.Stream(ent); err != nil {
+				return err
+			}
 		}
 		m := frame
 		writeFrame(m)

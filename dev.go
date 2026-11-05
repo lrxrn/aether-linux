@@ -199,6 +199,25 @@ func (d *Dev) xferAt(cmd byte, off int, data []byte) error {
 	}
 }
 
+// Stream shows a live frame: entries are [slot r g b]..., in a command the Windows music helper used (0x32). The board
+// shows it for ~2 s and then falls back to the stored per-key table, never writes flash, and a frame may hold just the
+// keys that changed. It bypasses the brightness setting. Packets are sent without waiting for their acks (a full frame is ~20 ms).
+func (d *Dev) Stream(entries []byte) error {
+	payload := append(append([]byte{}, entries...), 0xAA, 0x55) // trailer
+	for off := 0; off < len(payload); off += pkt - hdr {
+		n := min(pkt-hdr, len(payload)-off)
+		f := make([]byte, pkt)
+		f[0], f[1], f[2], f[3], f[4] = 0xAA, 0x32, byte(n), byte(off), byte(off>>8)
+		copy(f[hdr:], payload[off:off+n])
+		if _, err := d.f.Write(f); err != nil {
+			return err
+		}
+		time.Sleep(time.Millisecond)
+	}
+	d.drain() // drop the acks
+	return nil
+}
+
 // Live returns what the keys are showing right now (after brightness), also for built-in effects.
 func (d *Dev) Live() (map[int]RGB, error) {
 	q := make([]byte, 512)
